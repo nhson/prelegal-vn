@@ -2,6 +2,10 @@
 
 A platform for drafting common Vietnamese legal documents.
 
+## Status
+
+> **In Progress** — This project is currently under active development and is expected to be completed by **2026-06-05**.
+
 ## Overview
 
 PreLegal VN helps users create, manage, and draft standard legal documents commonly used in Vietnam, reducing the time and complexity involved in legal paperwork.
