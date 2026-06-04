@@ -8,7 +8,7 @@ The available documents are covered in the catalog.json file in the project root
 
 @catalog.json
 
-The current implementation is the V1 foundation: a Dockerised FastAPI backend with SQLite auth, serving a Next.js static frontend with a Mutual NDA prototype form.
+The current implementation has an AI chat interface for creating Mutual NDAs: the user chats with an AI assistant that asks questions, extracts field values, and populates a live NDA preview in real time.
 
 ## Development process
 
@@ -68,9 +68,18 @@ Backend available at http://localhost:8000
 - `COOKIE_SECURE` env var to enable Secure flag in production
 - Start/stop scripts for Mac, Linux, Windows (`scripts/`)
 
+### Completed (KAN-5) — AI Chat for Mutual NDA
+- AI chat panel replaces the manual form; NDA preview updates live as fields are extracted
+- LiteLLM via OpenRouter with Cerebras inference (`openrouter/openai/gpt-oss-120b`)
+- Structured outputs: each AI turn returns `{reply, fields}` — fields are re-derived from the full conversation history each turn
+- Conversation history is client-side (stateless backend); no auth required on chat endpoints
+- Security: `role` restricted to `user`/`assistant`, message list capped at 50, content at 8 000 chars
+
 ### Current API Endpoints
 - `POST /api/auth/signup` - Create new user account
 - `POST /api/auth/signin` - Sign in and receive JWT cookie
 - `POST /api/auth/signout` - Clear auth cookie
 - `GET /api/auth/me` - Get current user info
+- `GET /api/chat/greeting` - Get AI greeting message
+- `POST /api/chat/message` - Send chat message, get AI reply + extracted NDA fields
 - `GET /api/health` - Health check
