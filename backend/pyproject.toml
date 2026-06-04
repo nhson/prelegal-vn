@@ -9,6 +9,8 @@ dependencies = [
     "pyjwt>=2.8.0",
     "python-multipart>=0.0.9",
     "aiofiles>=24.0.0",
+    "litellm>=1.87.0",
+    "pydantic>=2.13.4",
 ]
 
 [build-system]

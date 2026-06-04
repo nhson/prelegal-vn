@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.database import create_tables
-from app.routers import auth, health
+from app.routers import auth, health, chat
 
 
 @asynccontextmanager
@@ -15,6 +15,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Prelegal API", lifespan=lifespan)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(health.router, prefix="/api", tags=["health"])
 
 # Serve Next.js static export — must come after API routes
