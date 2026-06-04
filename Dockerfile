@@ -1,8 +1,8 @@
 # Stage 1: Build Next.js static export
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 WORKDIR /frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm install --no-audit
 COPY frontend/ ./
 RUN npm run build
 
