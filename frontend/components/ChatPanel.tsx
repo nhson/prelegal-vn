@@ -165,7 +165,7 @@ export default function ChatPanel({ documentType, onDocumentUpdate, resetKey = 0
             onKeyDown={handleKeyDown}
             placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
             rows={2}
-            className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#209dd7] focus:outline-none focus:ring-1 focus:ring-[#209dd7]"
+            className="flex-1 resize-none rounded-xl border border-gray-500 bg-white text-gray-900 placeholder:text-gray-500 px-3 py-2 text-sm focus:border-[#209dd7] focus:outline-none focus:ring-2 focus:ring-[#209dd7]"
           />
           <button
             onClick={sendMessage}
