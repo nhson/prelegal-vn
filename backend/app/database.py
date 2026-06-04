@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
 
 
 def create_tables():
-    from app.models import User  # noqa: F401 — registers model with Base
+    from app.models import User, Document  # noqa: F401 — registers models with Base
     Base.metadata.create_all(bind=engine)
 
 

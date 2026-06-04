@@ -22,6 +22,7 @@ interface AIResponse {
 interface Props {
   documentType: string | null;
   onDocumentUpdate: (docType: string | null, fields: Record<string, string>) => void;
+  resetKey?: number;
 }
 
 function useMessageFactory() {
@@ -37,7 +38,7 @@ function toApiMessages(msgs: Message[]) {
   return msgs.map(({ role, content }) => ({ role, content }));
 }
 
-export default function ChatPanel({ documentType, onDocumentUpdate }: Props) {
+export default function ChatPanel({ documentType, onDocumentUpdate, resetKey = 0 }: Props) {
   const makeMessage = useMessageFactory();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -46,6 +47,8 @@ export default function ChatPanel({ documentType, onDocumentUpdate }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    setMessages([]);
+    setInput("");
     fetch("/api/chat/greeting")
       .then((r) => r.json())
       .then((data: { message: string }) => {
@@ -54,7 +57,8 @@ export default function ChatPanel({ documentType, onDocumentUpdate }: Props) {
       .catch(() => {
         setMessages([makeMessage("assistant", "Hi! What type of legal document can I help you create today?")]);
       });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -8,7 +8,7 @@ The available documents are covered in the catalog.json file in the project root
 
 @catalog.json
 
-The current implementation supports all 11 document types via AI chat. The AI identifies the document type from conversation, collects the required fields, and populates a live preview in real time. Unsupported document requests are handled gracefully with suggestions for the closest available type.
+The current implementation is the full V1 product: multi-user with JWT auth, AI chat across all 11 document types, document persistence per user, and a polished header with Sign In / New Document / My Documents / Save controls.
 
 ## Development process
 
@@ -85,6 +85,20 @@ Backend available at http://localhost:8000
 - Document type registry in `backend/app/document_catalog.py`; frontend catalog in `frontend/lib/catalog.ts`
 - `GET /api/chat/catalog` exposes the full list of supported document types
 
+### Completed (KAN-7) — Multi-User Support & Final Polish
+- User signup / signin / signout UI via AuthModal (sign-in / sign-up tabs in a centered overlay)
+- AuthContext wraps the app; calls GET /api/auth/me on mount to hydrate session
+- UserMenu in header: shows email initial + truncated email, dropdown with "My Documents" and "Sign Out"
+- "New Document" button in header resets document state and restarts the AI chat greeting
+- "Save" button in preview toolbar saves the current document to the user's account (POST on first save, PUT on subsequent saves to the same document)
+- Save title auto-generated: "{Document Type} – {Party1} & {Party2}"
+- MyDocumentsModal: lists saved documents by date, Load and Delete per row, error states
+- Document model: user_id FK, title, document_type, fields (JSON), created_at, updated_at
+- Shared get_current_user dependency in dependencies.py with safe JWT claim extraction
+- Full document CRUD: GET/POST/PUT/DELETE /api/documents (all auth-required)
+- Anonymous users can chat and preview; sign-in required to save
+- Dark Navy (#032147) applied to the Prelegal wordmark; Accent Yellow (#ecad0a) on Save button
+
 ### Current API Endpoints
 - `POST /api/auth/signup` - Create new user account
 - `POST /api/auth/signin` - Sign in and receive JWT cookie
@@ -93,4 +107,9 @@ Backend available at http://localhost:8000
 - `GET /api/chat/greeting` - Get AI greeting message
 - `GET /api/chat/catalog` - List all supported document types
 - `POST /api/chat/message` - Send chat message, get AI reply + document type + extracted fields
+- `GET /api/documents` - List user's saved documents (auth required)
+- `POST /api/documents` - Save new document (auth required)
+- `GET /api/documents/{id}` - Get specific document with fields (auth required)
+- `PUT /api/documents/{id}` - Update document title/fields (auth required)
+- `DELETE /api/documents/{id}` - Delete document (auth required)
 - `GET /api/health` - Health check
