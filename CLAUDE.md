@@ -8,7 +8,7 @@ The available documents are covered in the catalog.json file in the project root
 
 @catalog.json
 
-The current implementation has an AI chat interface for creating Mutual NDAs: the user chats with an AI assistant that asks questions, extracts field values, and populates a live NDA preview in real time.
+The current implementation supports all 11 document types via AI chat. The AI identifies the document type from conversation, collects the required fields, and populates a live preview in real time. Unsupported document requests are handled gracefully with suggestions for the closest available type.
 
 ## Development process
 
@@ -75,11 +75,22 @@ Backend available at http://localhost:8000
 - Conversation history is client-side (stateless backend); no auth required on chat endpoints
 - Security: `role` restricted to `user`/`assistant`, message list capped at 50, content at 8 000 chars
 
+### Completed (KAN-6) — All 11 Document Types
+- Document type detection: AI identifies what the user wants from the first message
+- 11 supported types: Mutual NDA, Cloud Service Agreement, Design Partner Agreement, SLA, PSA, DPA, Software License, Partnership, Pilot, BAA, AI Addendum
+- For Mutual NDA: rich prose preview via existing `generateNDA()` TypeScript template
+- For all other types: clean "Cover Page / Key Terms" summary preview via `generateGenericPreview()`
+- Unsupported document requests handled gracefully — AI explains and suggests closest match
+- Field state resets automatically when user switches document type
+- Document type registry in `backend/app/document_catalog.py`; frontend catalog in `frontend/lib/catalog.ts`
+- `GET /api/chat/catalog` exposes the full list of supported document types
+
 ### Current API Endpoints
 - `POST /api/auth/signup` - Create new user account
 - `POST /api/auth/signin` - Sign in and receive JWT cookie
 - `POST /api/auth/signout` - Clear auth cookie
 - `GET /api/auth/me` - Get current user info
 - `GET /api/chat/greeting` - Get AI greeting message
-- `POST /api/chat/message` - Send chat message, get AI reply + extracted NDA fields
+- `GET /api/chat/catalog` - List all supported document types
+- `POST /api/chat/message` - Send chat message, get AI reply + document type + extracted fields
 - `GET /api/health` - Health check
