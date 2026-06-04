@@ -3,44 +3,34 @@ from datetime import date
 from typing import Optional, Literal, List
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from litellm import completion
+
+from app.document_catalog import CATALOG, catalog_summary, get_doc_by_slug
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 MODEL = "openrouter/openai/gpt-oss-120b"
 EXTRA_BODY = {"provider": {"order": ["cerebras"]}}
+VALID_SLUGS: frozenset[str] = frozenset(d["slug"] for d in CATALOG)
 
 GREETING = (
-    "Hi! I'm here to help you create a Mutual Non-Disclosure Agreement. "
-    "Let's start — what's your company name and who will be signing on your behalf?"
+    "Hi! I'm here to help you create a legal document. "
+    "What type of agreement do you need? For example: Mutual NDA, Cloud Service Agreement, "
+    "Pilot Agreement, Data Processing Agreement, and more."
 )
 
 
-class NDAFields(BaseModel):
-    party1Name: Optional[str] = None
-    party1Title: Optional[str] = None
-    party1Company: Optional[str] = None
-    party1Address: Optional[str] = None
-    party2Name: Optional[str] = None
-    party2Title: Optional[str] = None
-    party2Company: Optional[str] = None
-    party2Address: Optional[str] = None
-    purpose: Optional[str] = None
-    effectiveDate: Optional[str] = None
-    mndaTermType: Optional[Literal["years", "until_terminated"]] = None
-    mndaTermYears: Optional[str] = None
-    confidentialityTermType: Optional[Literal["years", "perpetuity"]] = None
-    confidentialityTermYears: Optional[str] = None
-    governingLaw: Optional[str] = None
-    jurisdiction: Optional[str] = None
-    modifications: Optional[str] = None
+class FieldValue(BaseModel):
+    key: str
+    value: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     reply: str
-    fields: NDAFields
+    documentType: Optional[str] = None
+    fields: List[FieldValue] = Field(default_factory=list)
 
 
 class Message(BaseModel):
@@ -50,39 +40,51 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: List[Message] = Field(max_length=50)
+    documentType: Optional[str] = None
 
 
-def _build_system_prompt() -> str:
+def _build_system_prompt(doc_type: Optional[str]) -> str:
     today = date.today().isoformat()
-    return f"""You are a friendly legal assistant helping a user create a Mutual Non-Disclosure Agreement (NDA).
+
+    if not doc_type:
+        return f"""You are a friendly legal assistant helping users create legal documents.
+
+Supported document types:
+{catalog_summary()}
+
+Your job on this turn:
+1. Identify which document type the user wants based on their message.
+2. If it matches one of the supported types above, return its slug as documentType.
+3. If they ask for something NOT on the list (e.g. employment contract, lease, will), explain politely that you only support the documents listed, and suggest the closest available match.
+4. If it is unclear what they want, ask a clarifying question.
+
+Return documentType as the exact slug string from the list above, or null if not yet determined.
+Return an empty fields list on this turn — field collection begins once the document type is confirmed.
+Today's date: {today}"""
+
+    doc = get_doc_by_slug(doc_type)
+    if not doc:
+        return _build_system_prompt(None)
+
+    field_list = "\n".join(f"  - {f}" for f in doc["fields"])
+    return f"""You are a friendly legal assistant helping a user create a {doc["name"]}.
 
 Your goals:
-1. Have a natural conversation to gather all information needed for the NDA
-2. Ask 1-2 questions at a time — do not ask everything at once
-3. After each user reply, extract every NDA field value you can from the ENTIRE conversation history
-4. Return all currently known field values in the fields object (use null for fields not yet provided)
-5. When all required fields are known, congratulate the user and tell them their NDA is ready to download
+1. Have a natural conversation to gather all required information for this document.
+2. Ask 1-2 questions at a time — do not overwhelm the user.
+3. After each user reply, re-read the ENTIRE conversation and extract every field value you can.
+4. Return ALL currently known field values in the fields array (omit fields you don't yet know).
+5. When all required fields are collected, congratulate the user and tell them the document is ready to download.
 
-NDA fields to collect:
-- party1Name: signatory full name for Party 1 (the user's side)
-- party1Title: signatory job title for Party 1
-- party1Company: company name for Party 1
-- party1Address: notice address for Party 1 (email or postal address)
-- party2Name: signatory full name for Party 2 (the other side)
-- party2Title: signatory job title for Party 2
-- party2Company: company name for Party 2
-- party2Address: notice address for Party 2
-- purpose: brief description of the business purpose of the NDA
-- effectiveDate: start date in YYYY-MM-DD format (default to today {today} if not mentioned)
-- mndaTermType: "years" if the agreement expires after N years, "until_terminated" if it runs until cancelled
-- mndaTermYears: string number of years (e.g. "2"), only when mndaTermType is "years" — default "1"
-- confidentialityTermType: "years" if confidentiality expires, "perpetuity" if it lasts forever
-- confidentialityTermYears: string number of years, only when confidentialityTermType is "years" — default "1"
-- governingLaw: US state whose laws govern the agreement (e.g. "Delaware")
-- jurisdiction: courts for disputes (e.g. "New Castle, DE")
-- modifications: any special modifications to the standard terms (use empty string "" if none)
+Required fields for this document:
+{field_list}
 
-Keep your tone warm and professional. Re-read the entire conversation each turn to extract all known fields accurately."""
+Always return:
+- documentType: "{doc_type}" (unchanged — do not change this)
+- fields: a list of {{key, value}} objects for every field you have extracted so far
+- reply: your conversational response asking for missing information
+
+Today's date for default date values: {today}"""
 
 
 @router.get("/greeting")
@@ -90,9 +92,17 @@ def get_greeting():
     return {"message": GREETING}
 
 
+@router.get("/catalog")
+def get_catalog():
+    return {"documents": [{"slug": d["slug"], "name": d["name"], "description": d["description"]} for d in CATALOG]}
+
+
 @router.post("/message")
 def send_message(req: ChatRequest) -> ChatResponse:
-    messages = [{"role": "system", "content": _build_system_prompt()}]
+    if req.documentType is not None and req.documentType not in VALID_SLUGS:
+        raise HTTPException(status_code=422, detail=f"Unknown documentType: {req.documentType!r}")
+
+    messages = [{"role": "system", "content": _build_system_prompt(req.documentType)}]
     messages += [{"role": m.role, "content": m.content} for m in req.messages]
 
     try:
@@ -103,8 +113,19 @@ def send_message(req: ChatRequest) -> ChatResponse:
             reasoning_effort="low",
             extra_body=EXTRA_BODY,
         )
-        result = response.choices[0].message.content
-        return ChatResponse.model_validate_json(result)
+        raw = response.choices[0].message.content
     except Exception:
         logger.exception("AI service error")
         raise HTTPException(status_code=502, detail="AI service temporarily unavailable")
+
+    try:
+        parsed = ChatResponse.model_validate_json(raw)
+    except ValidationError:
+        logger.exception("Failed to parse AI response: %s", raw)
+        raise HTTPException(status_code=502, detail="AI returned an unexpected response format")
+
+    # Enforce documentType consistency — AI must not switch type mid-conversation
+    if req.documentType and parsed.documentType != req.documentType:
+        parsed.documentType = req.documentType
+
+    return parsed

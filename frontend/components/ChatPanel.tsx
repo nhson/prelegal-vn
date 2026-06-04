@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { NDAFormData, defaultFormData } from "@/lib/nda-template";
 
 interface Message {
   id: number;
@@ -9,54 +8,37 @@ interface Message {
   content: string;
 }
 
-interface NDAFields {
-  party1Name?: string | null;
-  party1Title?: string | null;
-  party1Company?: string | null;
-  party1Address?: string | null;
-  party2Name?: string | null;
-  party2Title?: string | null;
-  party2Company?: string | null;
-  party2Address?: string | null;
-  purpose?: string | null;
-  effectiveDate?: string | null;
-  mndaTermType?: "years" | "until_terminated" | null;
-  mndaTermYears?: string | null;
-  confidentialityTermType?: "years" | "perpetuity" | null;
-  confidentialityTermYears?: string | null;
-  governingLaw?: string | null;
-  jurisdiction?: string | null;
-  modifications?: string | null;
+interface FieldValue {
+  key: string;
+  value?: string | null;
+}
+
+interface AIResponse {
+  reply: string;
+  documentType?: string | null;
+  fields: FieldValue[];
 }
 
 interface Props {
-  onFieldsUpdate: (fields: NDAFormData) => void;
+  documentType: string | null;
+  onDocumentUpdate: (docType: string | null, fields: Record<string, string>) => void;
 }
 
-const MNDA_TERM_TYPES = new Set(["years", "until_terminated"]);
-const CONF_TERM_TYPES = new Set(["years", "perpetuity"]);
-
-function applyFields(fields: NDAFields): NDAFormData {
-  const result: NDAFormData = { ...defaultFormData };
-  for (const [key, value] of Object.entries(fields)) {
-    if (value === null || value === undefined) continue;
-    if (key === "mndaTermType" && !MNDA_TERM_TYPES.has(value as string)) continue;
-    if (key === "confidentialityTermType" && !CONF_TERM_TYPES.has(value as string)) continue;
-    (result as unknown as Record<string, unknown>)[key] = value;
-  }
-  return result;
-}
-
-let nextId = 0;
-function makeMessage(role: "user" | "assistant", content: string): Message {
-  return { id: nextId++, role, content };
+function useMessageFactory() {
+  const nextId = useRef(0);
+  return (role: "user" | "assistant", content: string): Message => ({
+    id: nextId.current++,
+    role,
+    content,
+  });
 }
 
 function toApiMessages(msgs: Message[]) {
   return msgs.map(({ role, content }) => ({ role, content }));
 }
 
-export default function ChatPanel({ onFieldsUpdate }: Props) {
+export default function ChatPanel({ documentType, onDocumentUpdate }: Props) {
+  const makeMessage = useMessageFactory();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,7 +52,7 @@ export default function ChatPanel({ onFieldsUpdate }: Props) {
         setMessages([makeMessage("assistant", data.message)]);
       })
       .catch(() => {
-        setMessages([makeMessage("assistant", "Hi! I'm here to help you create a Mutual NDA. What's your company name?")]);
+        setMessages([makeMessage("assistant", "Hi! What type of legal document can I help you create today?")]);
       });
   }, []);
 
@@ -83,7 +65,6 @@ export default function ChatPanel({ onFieldsUpdate }: Props) {
     if (!text || loading) return;
 
     const userMsg = makeMessage("user", text);
-    // Build the outgoing list before any state update so it's not stale
     const outgoing = [...messages, userMsg];
 
     setMessages(outgoing);
@@ -94,18 +75,24 @@ export default function ChatPanel({ onFieldsUpdate }: Props) {
       const res = await fetch("/api/chat/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: toApiMessages(outgoing) }),
+        body: JSON.stringify({
+          messages: toApiMessages(outgoing),
+          documentType: documentType ?? null,
+        }),
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      const data: { reply: string; fields: NDAFields } = await res.json();
-      // Functional updater avoids stale closure after the async gap
+      const data: AIResponse = await res.json();
       setMessages((prev) => [...prev, makeMessage("assistant", data.reply)]);
 
-      if (data.fields) {
-        onFieldsUpdate(applyFields(data.fields));
+      const fieldRecord: Record<string, string> = {};
+      for (const { key, value } of data.fields ?? []) {
+        if (value !== null && value !== undefined && value !== "") {
+          fieldRecord[key] = value;
+        }
       }
+      onDocumentUpdate(data.documentType ?? null, fieldRecord);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -115,7 +102,7 @@ export default function ChatPanel({ onFieldsUpdate }: Props) {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [input, loading, messages, onFieldsUpdate]);
+  }, [input, loading, messages, documentType, onDocumentUpdate]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
